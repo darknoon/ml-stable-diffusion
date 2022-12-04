@@ -190,6 +190,7 @@ def bundle_resources_for_swift_cli(args):
     # Compile model using coremlcompiler (Significantly reduces the load time for unet)
     for source_name, target_name in [("text_encoder", "TextEncoder"),
                                      ("vae_decoder", "VAEDecoder"),
+                                     ("vae_encoder", "VAEEncoder"),
                                      ("unet", "Unet"),
                                      ("unet_chunk1", "UnetChunk1"),
                                      ("unet_chunk2", "UnetChunk2"),
