@@ -452,6 +452,63 @@ def convert_vae_decoder(pipe, args):
     del traced_vae_decoder, pipe.vae.decoder, coreml_vae_decoder
     gc.collect()
 
+def convert_vae_encoder(pipe, args):
+    """ Converts the VAE Encoder component of Stable Diffusion
+    """
+    out_path = _get_out_path(args, "vae_encoder")
+    if os.path.exists(out_path):
+        logger.info(
+            f"`vae_encoder` already exists at {out_path}, skipping conversion."
+        )
+        return
+
+    if not hasattr(pipe, "unet"):
+        raise RuntimeError(
+            "convert_unet() deletes pipe.unet to save RAM. "
+            "Please use convert_vae_encoder() before convert_unet()")
+
+    image_shape = (
+        1,  # B
+        pipe.vae.in_channels,  # C
+        pipe.vae.config.sample_size,  # H
+        pipe.vae.config.sample_size,  # W
+    )
+
+    sample_vae_encoder_inputs = {
+        "image": torch.rand(*image_shape, dtype=torch.float16)
+    }
+
+    class VAEEncoder(nn.Module):
+        """ Wrapper nn.Module wrapper for pipe.encode() method
+        """
+
+        def __init__(self):
+            super().__init__()
+            self.quant_conv = pipe.vae.quant_conv
+            self.encoder = pipe.vae.encoder
+
+        def forward(self, image):
+            return self.quant_conv(self.encoder(image))
+
+    baseline_encoder = VAEEncoder().eval()
+
+    # No optimization needed for the VAE Encoder as it is a pure ConvNet
+    traced_vae_encoder = torch.jit.trace(
+        baseline_encoder, (sample_vae_encoder_inputs["image"].to(torch.float32), ))
+
+    modify_coremltools_torch_frontend_badbmm()
+    coreml_vae_encoder, out_path = _convert_to_coreml(
+        "vae_encoder", traced_vae_encoder, sample_vae_encoder_inputs,
+        ["z"], args)
+
+    # Set model metadata
+    coreml_vae_encoder.author = f"Please refer to the Model Card available at huggingface.co/{args.model_version}"
+    coreml_vae_encoder.license = "OpenRAIL (https://huggingface.co/spaces/CompVis/stable-diffusion-license)"
+    coreml_vae_encoder.version = args.model_version
+    coreml_vae_encoder.short_description = \
+        "Stable Diffusion generates images conditioned on text and/or other images as input through the diffusion process. " \
+        "Please refer to https://arxiv.org/abs/2112.10752"
+
 
 def convert_unet(pipe, args):
     """ Converts the UNet component of Stable Diffusion
@@ -802,6 +859,11 @@ def main(args):
         convert_vae_decoder(pipe, args)
         logger.info("Converted vae_decoder")
 
+    if args.convert_vae_encoder:
+        logger.info("Converting vae_encoder")
+        convert_vae_encoder(pipe, args)
+        logger.info("Converted vae_encoder")
+
     if args.convert_unet:
         logger.info("Converting unet")
         convert_unet(pipe, args)
@@ -832,9 +894,11 @@ def main(args):
 def parser_spec():
     parser = argparse.ArgumentParser()
 
-    # Select which models to export (All are needed for text-to-image pipeline to function)
+    # Select which models to export (All except vae encoder are needed for text-to-image pipeline to function)
     parser.add_argument("--convert-text-encoder", action="store_true")
     parser.add_argument("--convert-vae-decoder", action="store_true")
+    # For image-to-image pipeline, need vae encoder
+    parser.add_argument("--convert-vae-encoder", action="store_true")
     parser.add_argument("--convert-unet", action="store_true")
     parser.add_argument("--convert-safety-checker", action="store_true")
     parser.add_argument(

@@ -51,6 +51,7 @@ class CoreMLStableDiffusionPipeline(DiffusionPipeline):
         text_encoder: CoreMLModel,
         unet: CoreMLModel,
         vae_decoder: CoreMLModel,
+        vae_encoder: CoreMLModel,
         feature_extractor: CLIPFeatureExtractor,
         safety_checker: Optional[CoreMLModel],
         scheduler: Union[DDIMScheduler,
@@ -89,6 +90,7 @@ class CoreMLStableDiffusionPipeline(DiffusionPipeline):
         self.unet.in_channels = self.unet.expected_inputs["sample"]["shape"][1]
 
         self.vae_decoder = vae_decoder
+        self.vae_encoder = vae_encoder
 
         VAE_DECODER_UPSAMPLE_FACTOR = 8
 
@@ -403,7 +405,7 @@ def get_coreml_pipe(pytorch_pipe,
         "feature_extractor": pytorch_pipe.feature_extractor,
     }
 
-    model_names_to_load = ["text_encoder", "unet", "vae_decoder"]
+    model_names_to_load = ["text_encoder", "unet", "vae_decoder", "vae_encoder"]
     if getattr(pytorch_pipe, "safety_checker", None) is not None:
         model_names_to_load.append("safety_checker")
     else:

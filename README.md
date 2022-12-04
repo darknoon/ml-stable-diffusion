@@ -35,6 +35,7 @@ Please see [Important Notes on Performance Benchmarks](#important-notes-on-perfo
 
 ```bash
 conda create -n coreml_stable_diffusion python=3.8 -y
+conda install 
 conda activate coreml_stable_diffusion
 cd /path/to/cloned/ml-stable-diffusion/repository
 pip install -e .
